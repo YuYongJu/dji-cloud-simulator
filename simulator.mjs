@@ -16,6 +16,7 @@
  */
 
 import mqtt from 'mqtt';
+import { readFileSync } from 'fs';
 
 // ── CLI ──────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ Options:
   --gateway <sn>      Gateway (dock) serial number (default: DOCK-SN-001)
   --device <sn>       Aircraft serial number (default: AIRCRAFT-SN-001)
   --scenario <name>   Scenario to run (default: patrol)
+  --config <path>     Load scenario config from JSON file (see below)
   -h, --help          Show this help message
 
 Scenarios:
@@ -51,6 +53,23 @@ Scenarios:
   offline             Device comes online briefly, sends one OSD frame,
                       then goes offline.
 
+Config File (--config):
+  JSON file to override defaults. All fields optional:
+  {
+    "waypoints": [{"lat": 37.7749, "lng": -122.4194}, ...],
+    "osd_interval_ms": 2000,
+    "dock_osd_every_n": 5,
+    "hms_alarm_every_n": 20,
+    "battery_start": 95,
+    "battery_decay_per_tick": 0.3,
+    "battery_min": 20,
+    "altitude_base": 50,
+    "altitude_variation": 5,
+    "hms_codes": [
+      {"code": "0x16100001", "level": 1, "module": 1}
+    ]
+  }
+
 Prerequisites:
   Any MQTT 3.1.1+ broker on localhost:1883. Quickest setup:
     docker run -d -p 1883:1883 eclipse-mosquitto:2
@@ -59,6 +78,7 @@ Examples:
   dji-cloud-simulator
   dji-cloud-simulator --scenario mission
   dji-cloud-simulator --broker mqtt://192.168.1.100:1883
+  dji-cloud-simulator --config my-site.json --scenario patrol
   dji-cloud-simulator --gateway MY-DOCK-001 --device MY-DRONE-001
 
 Message Format:
@@ -78,14 +98,28 @@ const getArg = (flag) => {
   return i !== -1 ? args[i + 1] : null;
 };
 
+// ── Config file loading ─────────────────────────────────────────────
+
+let userConfig = {};
+const configPath = getArg('--config');
+if (configPath) {
+  try {
+    userConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
+    console.log(`Loaded config from ${configPath}`);
+  } catch (err) {
+    console.error(`Failed to load config from ${configPath}: ${err.message}`);
+    process.exit(1);
+  }
+}
+
 const BROKER_URL = getArg('--broker') ?? process.env.MQTT_BROKER ?? 'mqtt://localhost:1883';
 const GATEWAY_SN = getArg('--gateway') ?? 'DOCK-SN-001';
 const DEVICE_SN  = getArg('--device')  ?? 'AIRCRAFT-SN-001';
 const SCENARIO   = getArg('--scenario') ?? 'patrol';
 
-// ── Simulated flight path (Boston Seaport perimeter) ─────────────────
+// ── Configurable defaults ───────────────────────────────────────────
 
-const WAYPOINTS = [
+const DEFAULT_WAYPOINTS = [
   { lat: 42.3521, lng: -71.0446 },
   { lat: 42.3535, lng: -71.0430 },
   { lat: 42.3548, lng: -71.0415 },
@@ -96,13 +130,50 @@ const WAYPOINTS = [
   { lat: 42.3521, lng: -71.0446 },
 ];
 
+const WAYPOINTS          = (Array.isArray(userConfig.waypoints) && userConfig.waypoints.length >= 2)
+                             ? userConfig.waypoints : DEFAULT_WAYPOINTS;
+const OSD_INTERVAL_MS    = userConfig.osd_interval_ms ?? 2000;
+const DOCK_OSD_EVERY_N   = userConfig.dock_osd_every_n ?? 5;
+const HMS_ALARM_EVERY_N  = userConfig.hms_alarm_every_n ?? 20;
+const BATTERY_START      = userConfig.battery_start ?? 95;
+const BATTERY_DECAY      = userConfig.battery_decay_per_tick ?? 0.3;
+const BATTERY_MIN        = userConfig.battery_min ?? 20;
+const ALTITUDE_BASE      = userConfig.altitude_base ?? 50;
+const ALTITUDE_VARIATION = userConfig.altitude_variation ?? 5;
+const CUSTOM_HMS_CODES   = userConfig.hms_codes ?? null;
+
 const HOME_POINT = WAYPOINTS[0];
+
+// ── Flight mode codes (DJI Cloud API v1.x) ──────────────────────────
+// 0=Standby, 4=Auto Takeoff, 5=Wayline Flight, 9=RTH, 10=Landing
+const MODE = { STANDBY: 0, TAKEOFF: 4, WAYLINE: 5, RTH: 9, LANDING: 10 };
+
+// ── Per-run unique IDs ──────────────────────────────────────────────
+const RUN_ID = Date.now().toString(36);
+const MISSION_FLIGHT_ID = `sim-flight-${RUN_ID}`;
+const MISSION_TRACK_ID  = `sim-track-${RUN_ID}`;
+const MISSION_PLAN_ID   = `sim-plan-${RUN_ID}`;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
 const genBid = () => `sim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const genTid = () => `tid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const now = () => Date.now();
+
+/** RTK quality degrades when satellite count drops below acquisition threshold */
+function rtkQuality(rtkNumber) {
+  if (rtkNumber >= 8) return 5;  // RTK fixed (high precision)
+  if (rtkNumber >= 6) return 4;  // RTK fixed
+  if (rtkNumber >= 4) return 2;  // RTK float
+  return 1;                       // Single point
+}
+
+/** Cell voltage differential grows with flight time, simulating thermal imbalance */
+function cellDifferential(tick) {
+  // Starts near 0mV, grows to ~300mV over 250 cycles (~8 min)
+  const base = Math.min(300, tick * 1.2);
+  return base + (Math.random() - 0.5) * 20;
+}
 
 function interpolate(a, b, t) {
   return { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t };
@@ -124,49 +195,93 @@ console.log(`\nDJI Cloud API Simulator`);
 console.log(`  Broker     : ${BROKER_URL}`);
 console.log(`  Gateway SN : ${GATEWAY_SN}`);
 console.log(`  Device SN  : ${DEVICE_SN}`);
-console.log(`  Scenario   : ${SCENARIO}\n`);
+console.log(`  Scenario   : ${SCENARIO}`);
+if (configPath) {
+  console.log(`  Config     : ${configPath}`);
+  console.log(`  Waypoints  : ${WAYPOINTS.length} points (${WAYPOINTS[0].lat.toFixed(4)}, ${WAYPOINTS[0].lng.toFixed(4)} ...)`);
+  console.log(`  OSD rate   : ${OSD_INTERVAL_MS}ms | Battery: ${BATTERY_START}% → ${BATTERY_MIN}% @ ${BATTERY_DECAY}/tick`);
+}
+console.log();
 
 const client = mqtt.connect(BROKER_URL, {
   clientId: `dji-sim-${Date.now()}`,
   clean: true,
+  reconnectPeriod: 3000,   // retry every 3s on disconnect
+  connectTimeout: 10000,   // 10s connection timeout
 });
 
+let connected = false;
+
 client.on('error', (err) => {
-  if (err.code === 'ECONNREFUSED') {
+  if (err.code === 'ECONNREFUSED' && !connected) {
     console.error(`\nCould not connect to MQTT broker at ${BROKER_URL}`);
+    console.error(`Retrying every 3 seconds... (Ctrl+C to stop)`);
     console.error(`\nQuick fix: docker run -d -p 1883:1883 eclipse-mosquitto:2\n`);
-  } else {
-    console.error('MQTT error:', err.message);
+  } else if (connected) {
+    console.error(`MQTT error: ${err.message} (will reconnect)`);
   }
-  process.exit(1);
+});
+
+client.on('offline', () => {
+  if (connected) {
+    connected = false;
+    console.log('\n[conn]   Broker disconnected, attempting reconnect...');
+  }
+});
+
+client.on('reconnect', () => {
+  if (!connected) console.log('[conn]   Reconnecting...');
 });
 
 client.on('connect', () => {
+  connected = true;
   client.subscribe(`thing/product/${GATEWAY_SN}/services`, { qos: 1 });
 });
 
+// Known DJI Cloud API service methods
+const KNOWN_METHODS = new Set([
+  'flighttask_prepare', 'flighttask_execute', 'flighttask_undo',
+  'flighttask_pause', 'flighttask_recovery',
+  'device_reboot', 'drone_open', 'drone_close',
+  'device_format', 'cover_open', 'cover_close',
+  'putter_open', 'putter_close', 'charge_open', 'charge_close',
+  'sdr_workmode_switch', 'supplement_light_open', 'supplement_light_close',
+  'return_home', 'live_start_push', 'live_stop_push',
+]);
+
 client.on('message', (topic, payload) => {
   if (!topic.includes('/services')) return;
-  try {
-    const req = JSON.parse(payload.toString());
-    console.log(`  <- Received command: ${req.method} (bid: ${req.bid})`);
 
-    const reply = {
-      bid: req.bid,
-      tid: req.tid ?? genTid(),
-      timestamp: now(),
-      method: req.method,
-      data: { result: 0 },
-    };
-    client.publish(
-      `thing/product/${GATEWAY_SN}/services_reply`,
-      JSON.stringify(reply),
-      { qos: 1 },
-    );
-    console.log(`  -> Sent ack for ${req.method}`);
+  let req;
+  try {
+    req = JSON.parse(payload.toString());
   } catch {
-    // ignore malformed
+    console.log(`  <- Malformed JSON command (ignored)`);
+    return;
   }
+
+  if (!req.bid || !req.method) {
+    console.log(`  <- Invalid command: missing bid or method (ignored)`);
+    return;
+  }
+
+  const known = KNOWN_METHODS.has(req.method);
+  console.log(`  <- Received command: ${req.method} (bid: ${req.bid})${known ? '' : ' [unknown method]'}`);
+
+  // Reply with result: 0 for known methods, result: 314000 (unsupported) for unknown
+  const reply = {
+    bid: req.bid,
+    tid: req.tid ?? genTid(),
+    timestamp: now(),
+    method: req.method,
+    data: { result: known ? 0 : 314000 },
+  };
+  client.publish(
+    `thing/product/${GATEWAY_SN}/services_reply`,
+    JSON.stringify(reply),
+    { qos: 1 },
+  );
+  console.log(`  -> Sent ${known ? 'ack' : 'error 314000 (unsupported)'} for ${req.method}`);
 });
 
 // ── Publish helpers ──────────────────────────────────────────────────
@@ -223,13 +338,22 @@ function publishState() {
   console.log(`[state]  Firmware 07.01.10.01`);
 }
 
-function publishOsd(pos, tick) {
-  const altitude   = 50 + Math.sin(tick * 0.1) * 5;
-  const battery    = Math.max(20, 95 - tick * 0.3);
+function publishOsd(pos, tick, modeCode = MODE.WAYLINE) {
+  const altitude   = ALTITUDE_BASE + Math.sin(tick * 0.1) * ALTITUDE_VARIATION;
+  const battery    = Math.max(BATTERY_MIN, BATTERY_START - tick * BATTERY_DECAY);
   const windSpeed  = 2 + Math.random() * 3;
   const hSpeed     = 8 + Math.random() * 4;
   const vSpeed     = (Math.random() - 0.5) * 0.5;
   const homeDistance = haversineMeters(pos, HOME_POINT);
+
+  // Realistic per-cell behavior: cell 1 draws slightly more current, gets warmer
+  const cell0Current = 7500 + Math.random() * 1500;
+  const cell1Current = 8000 + Math.random() * 1500; // higher draw
+  const diff = cellDifferential(tick);
+  const cell0Voltage = 22400 + Math.random() * 100;
+  const cell1Voltage = cell0Voltage - diff; // grows apart over time
+
+  const rtkNum = 6 + Math.floor(Math.random() * 6);
 
   const payload = {
     latitude:         pos.lat,
@@ -242,7 +366,7 @@ function publishOsd(pos, tick) {
     horizontal_speed: hSpeed,
     vertical_speed:   vSpeed,
     wind_speed:       windSpeed,
-    mode_code:        2,
+    mode_code:        modeCode,
     gear:             1,
     battery: {
       capacity_percent: Math.round(battery),
@@ -251,18 +375,18 @@ function publishOsd(pos, tick) {
       batteries: [
         {
           capacity_percent: Math.round(battery),
-          voltage:      22400 + Math.random() * 200,
+          voltage:      Math.round(cell0Voltage),
           temperature:  250 + Math.random() * 30,
-          current:      8000 + Math.random() * 1000,
+          current:      Math.round(cell0Current),
           index:        0,
           type:         0,
           firmware_version: '02.01.07.16',
         },
         {
           capacity_percent: Math.round(battery - 1),
-          voltage:      22350 + Math.random() * 200,
-          temperature:  248 + Math.random() * 30,
-          current:      8000 + Math.random() * 1000,
+          voltage:      Math.round(cell1Voltage),
+          temperature:  252 + Math.random() * 30, // runs warmer from higher draw
+          current:      Math.round(cell1Current),
           index:        1,
           type:         0,
           firmware_version: '02.01.07.16',
@@ -272,15 +396,15 @@ function publishOsd(pos, tick) {
     position_state: {
       gps_number:  14 + Math.floor(Math.random() * 6),
       is_fixed:    1,
-      rtk_number:  6 + Math.floor(Math.random() * 6),
-      quality:     5,
+      rtk_number:  rtkNum,
+      quality:     rtkQuality(rtkNum),
     },
     home_distance:     homeDistance,
     home_latitude:     HOME_POINT.lat,
     home_longitude:    HOME_POINT.lng,
     storage: {
       total:  64000,
-      used:   Math.round(1200 + tick * 15),
+      used:   Math.min(64000, Math.round(1200 + tick * 15)),
     },
     obstacle_avoidance: {
       horizon:  1,
@@ -301,7 +425,7 @@ function publishOsd(pos, tick) {
   };
 
   client.publish(`thing/product/${DEVICE_SN}/osd`, JSON.stringify(payload), { qos: 0 });
-  console.log(`[osd]    lat=${pos.lat.toFixed(5)} lng=${pos.lng.toFixed(5)} alt=${altitude.toFixed(1)}m bat=${Math.round(battery)}% home=${homeDistance.toFixed(0)}m`);
+  console.log(`[osd]    lat=${pos.lat.toFixed(5)} lng=${pos.lng.toFixed(5)} alt=${altitude.toFixed(1)}m bat=${Math.round(battery)}% home=${homeDistance.toFixed(0)}m mode=${modeCode} rtk=${rtkQuality(rtkNum)}`);
 }
 
 function publishDockOsd(tick) {
@@ -333,58 +457,77 @@ function publishDockOsd(tick) {
   console.log(`[dock]   temp=${payload.environment_temperature.toFixed(1)}C humid=${payload.humidity.toFixed(0)}% cover=${payload.cover_state ? 'open' : 'closed'}`);
 }
 
-function publishHmsAlarm() {
+function publishHmsAlarm(tick = 0) {
+  const diff = cellDifferential(tick);
+  const batteryImbalanced = diff > 200; // 200mV threshold triggers HMS
+
+  // Use custom HMS codes if provided, otherwise default behavior
+  let alarms;
+  if (CUSTOM_HMS_CODES) {
+    alarms = CUSTOM_HMS_CODES.map((c) => ({
+      code: c.code,
+      level: c.level ?? 1,
+      module: c.module ?? 1,
+      in_the_sky: 1,
+      device_type: 'aircraft',
+      imminent: c.imminent ?? false,
+      args: c.args ?? { component_index: 0, sensor_index: 0 },
+    }));
+  } else {
+    alarms = [
+      {
+        code: '0x16100001',
+        level: 1,
+        module: 1,
+        in_the_sky: 1,
+        device_type: 'aircraft',
+        imminent: false,
+        args: { component_index: 0, sensor_index: 0 },
+      },
+    ];
+
+    // Battery imbalance alarm only fires when cell differential exceeds threshold
+    if (batteryImbalanced) {
+      alarms.push({
+        code: '0x16100086',
+        level: 2,
+        module: 1,
+        in_the_sky: 1,
+        device_type: 'aircraft',
+        imminent: diff > 250,
+        args: { component_index: 0, sensor_index: 1 },
+      });
+    }
+  }
+
   const payload = {
     bid: genBid(),
     tid: genTid(),
     timestamp: now(),
     method: 'hms',
-    data: {
-      list: [
-        {
-          code: '0x16100001',
-          level: 1,
-          module: 1,
-          in_the_sky: 1,
-          device_type: 'aircraft',
-          imminent: false,
-          args: {
-            component_index: 0,
-            sensor_index: 0,
-          },
-        },
-        {
-          code: '0x16100086',
-          level: 2,
-          module: 1,
-          in_the_sky: 1,
-          device_type: 'aircraft',
-          imminent: true,
-          args: {
-            component_index: 0,
-            sensor_index: 1,
-          },
-        },
-      ],
-    },
+    data: { list: alarms },
   };
 
   client.publish(`thing/product/${GATEWAY_SN}/events`, JSON.stringify(payload), { qos: 1 });
-  console.log(`[event]  HMS alarm: compass interference (Reminder) + battery cell imbalance (Warning)`);
+  const alarmDesc = batteryImbalanced
+    ? `compass interference (Reminder) + battery cell imbalance (Warning, ${Math.round(diff)}mV delta)`
+    : `compass interference (Reminder) [battery delta ${Math.round(diff)}mV, below 200mV threshold]`;
+  console.log(`[event]  HMS alarm: ${alarmDesc}`);
 }
 
-function publishMissionProgress(step) {
-  const steps = [
-    { status: 2, current_step: 0,  percent: 0,   desc: 'Mission uploaded, preparing' },
-    { status: 3, current_step: 0,  percent: 5,   desc: 'Takeoff initiated' },
-    { status: 5, current_step: 1,  percent: 15,  desc: 'En route to waypoint 1' },
-    { status: 5, current_step: 2,  percent: 35,  desc: 'Executing waypoint 2' },
-    { status: 5, current_step: 3,  percent: 55,  desc: 'Executing waypoint 3' },
-    { status: 5, current_step: 4,  percent: 80,  desc: 'Returning home' },
-    { status: 6, current_step: 4,  percent: 100, desc: 'Mission complete, landed' },
-  ];
+// Mission steps with corresponding flight mode codes
+const MISSION_STEPS = [
+  { status: 2, current_step: 0,  percent: 0,   mode: MODE.STANDBY,  desc: 'Mission uploaded, preparing' },
+  { status: 3, current_step: 0,  percent: 5,   mode: MODE.TAKEOFF,  desc: 'Takeoff initiated' },
+  { status: 5, current_step: 1,  percent: 15,  mode: MODE.WAYLINE,  desc: 'En route to waypoint 1' },
+  { status: 5, current_step: 2,  percent: 35,  mode: MODE.WAYLINE,  desc: 'Executing waypoint 2' },
+  { status: 5, current_step: 3,  percent: 55,  mode: MODE.WAYLINE,  desc: 'Executing waypoint 3' },
+  { status: 5, current_step: 4,  percent: 80,  mode: MODE.RTH,      desc: 'Returning home' },
+  { status: 6, current_step: 4,  percent: 100, mode: MODE.LANDING,  desc: 'Mission complete, landing' },
+];
 
-  const s = steps[step % steps.length];
+function publishMissionProgress(step) {
+  const s = MISSION_STEPS[step % MISSION_STEPS.length];
   const payload = {
     bid: genBid(),
     tid: genTid(),
@@ -399,18 +542,18 @@ function publishMissionProgress(step) {
           percent: s.percent,
         },
         ext: {
-          flight_id: 'sim-mission-001',
+          flight_id: MISSION_FLIGHT_ID,
           current_waypoint_index: s.current_step,
           media_file_count: s.current_step > 0 ? s.current_step * 2 : 0,
-          track_id: 'sim-track-001',
-          flight_plan_id: 'sim-plan-001',
+          track_id: MISSION_TRACK_ID,
+          flight_plan_id: MISSION_PLAN_ID,
         },
       },
     },
   };
 
   client.publish(`thing/product/${GATEWAY_SN}/events`, JSON.stringify(payload), { qos: 1 });
-  console.log(`[event]  Mission: ${s.desc} (status=${s.status}, ${s.percent}%)`);
+  console.log(`[event]  Mission: ${s.desc} (status=${s.status}, ${s.percent}%, mode=${s.mode})`);
 }
 
 // ── Scenarios ────────────────────────────────────────────────────────
@@ -420,7 +563,7 @@ async function sleep(ms) {
 }
 
 async function runPatrol() {
-  console.log('Starting patrol scenario: OSD at 2s intervals, dock OSD every 10s, looping waypoints\n');
+  console.log(`Starting patrol scenario: OSD every ${OSD_INTERVAL_MS}ms, dock OSD every ${DOCK_OSD_EVERY_N} cycles, HMS every ${HMS_ALARM_EVERY_N} cycles\n`);
 
   publishStatus(true);
   await sleep(500);
@@ -436,34 +579,39 @@ async function runPatrol() {
     const b = WAYPOINTS[(wpIdx + 1) % WAYPOINTS.length];
     const pos = interpolate(a, b, segT);
 
-    publishOsd(pos, tick);
+    // Mode transitions: standby → takeoff → wayline flight
+    const mode = tick === 0 ? MODE.STANDBY : tick <= 2 ? MODE.TAKEOFF : MODE.WAYLINE;
+    publishOsd(pos, tick, mode);
 
-    if (tick % 5 === 0) {
+    if (tick % DOCK_OSD_EVERY_N === 0) {
       publishDockOsd(tick);
     }
 
-    if (tick > 0 && tick % 20 === 0) {
+    if (tick > 0 && tick % HMS_ALARM_EVERY_N === 0) {
       await sleep(100);
-      publishHmsAlarm();
+      publishHmsAlarm(tick);
     }
 
     segT += 0.2;
     if (segT >= 1) { segT = 0; wpIdx++; }
     tick++;
 
-    await sleep(2000);
+    await sleep(OSD_INTERVAL_MS);
   }
 }
 
 async function runHmsAlarm() {
-  console.log('HMS alarm scenario: device online, then immediate alarm burst\n');
+  console.log('HMS alarm scenario: device online, then alarm bursts with escalating cell imbalance\n');
   publishStatus(true);
   await sleep(500);
   publishState();
   await sleep(1000);
 
-  for (let i = 0; i < 5; i++) {
-    publishHmsAlarm();
+  // Simulate progressive cell degradation: tick jumps simulate time passing
+  // First few alarms below threshold, later ones trigger battery HMS
+  const ticks = [50, 100, 150, 200, 250];
+  for (const tick of ticks) {
+    publishHmsAlarm(tick);
     await sleep(3000);
   }
 
@@ -473,18 +621,19 @@ async function runHmsAlarm() {
 }
 
 async function runMission() {
-  console.log('Mission scenario: device online, progress events, OSD during flight\n');
+  console.log(`Mission scenario: flight=${MISSION_FLIGHT_ID}\n`);
   publishStatus(true);
   await sleep(500);
   publishState();
   await sleep(1000);
 
   let tick = 0;
-  for (let step = 0; step < 7; step++) {
+  for (let step = 0; step < MISSION_STEPS.length; step++) {
     publishMissionProgress(step);
+    const stepMode = MISSION_STEPS[step].mode;
     for (let i = 0; i < 3; i++) {
       await sleep(2000);
-      publishOsd(WAYPOINTS[tick % WAYPOINTS.length], tick++);
+      publishOsd(WAYPOINTS[tick % WAYPOINTS.length], tick++, stepMode);
     }
   }
 
@@ -516,9 +665,15 @@ if (!SCENARIOS[SCENARIO]) {
   process.exit(1);
 }
 
+let scenarioStarted = false;
 client.on('connect', async () => {
-  console.log(`Connected to broker\n`);
-  await SCENARIOS[SCENARIO]();
+  if (!scenarioStarted) {
+    scenarioStarted = true;
+    console.log(`Connected to broker\n`);
+    await SCENARIOS[SCENARIO]();
+  } else {
+    console.log('[conn]   Reconnected to broker');
+  }
 });
 
 process.on('SIGINT', () => {
