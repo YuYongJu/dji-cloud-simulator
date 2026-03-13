@@ -1,0 +1,34 @@
+{
+  "name": "dji-cloud-simulator",
+  "version": "1.0.0",
+  "description": "Spec-accurate DJI Cloud API MQTT simulator for development and integration testing",
+  "type": "module",
+  "main": "simulator.mjs",
+  "bin": {
+    "dji-cloud-simulator": "./simulator.mjs"
+  },
+  "scripts": {
+    "start": "node simulator.mjs",
+    "patrol": "node simulator.mjs --scenario patrol",
+    "mission": "node simulator.mjs --scenario mission",
+    "hms": "node simulator.mjs --scenario hms-alarm",
+    "offline": "node simulator.mjs --scenario offline"
+  },
+  "keywords": [
+    "dji",
+    "dji-cloud-api",
+    "mqtt",
+    "drone",
+    "simulator",
+    "uas",
+    "matrice-30t",
+    "dock-2"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "mqtt": "^5.15.0"
+  }
+}
