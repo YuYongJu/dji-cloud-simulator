@@ -24,6 +24,10 @@
     "matrice-30t",
     "dock-2"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YuYongJu/dji-cloud-simulator.git"
+  },
   "license": "MIT",
   "engines": {
     "node": ">=18"

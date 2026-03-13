@@ -1,0 +1,17 @@
+{
+  "waypoints": [
+    { "lat": 37.7749, "lng": -122.4194 },
+    { "lat": 37.7755, "lng": -122.4180 },
+    { "lat": 37.7760, "lng": -122.4165 },
+    { "lat": 37.7750, "lng": -122.4160 },
+    { "lat": 37.7749, "lng": -122.4194 }
+  ],
+  "osd_interval_ms": 2000,
+  "dock_osd_every_n": 5,
+  "hms_alarm_every_n": 20,
+  "battery_start": 95,
+  "battery_decay_per_tick": 0.3,
+  "battery_min": 20,
+  "altitude_base": 80,
+  "altitude_variation": 10
+}

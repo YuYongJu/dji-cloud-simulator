@@ -22,7 +22,7 @@ That's it. The simulator connects to `mqtt://localhost:1883` and starts publishi
 |----------|---------|-------------|
 | **patrol** (default) | `npx dji-cloud-simulator` | Continuous patrol loop. OSD every 2s, dock telemetry every 10s, HMS alarms every 40s. Runs until Ctrl+C. |
 | **mission** | `npx dji-cloud-simulator --scenario mission` | Full mission lifecycle: takeoff, 4 waypoints, landing. Publishes `flighttask_progress` events with nested status/progress/ext. |
-| **hms-alarm** | `npx dji-cloud-simulator --scenario hms-alarm` | Device comes online, fires 5 HMS alarm bursts (compass interference + battery imbalance), then goes offline. |
+| **hms-alarm** | `npx dji-cloud-simulator --scenario hms-alarm` | Device comes online, fires 5 HMS alarm bursts with escalating cell imbalance. Early bursts show compass interference only; later bursts add battery imbalance when voltage differential exceeds 200mV threshold. |
 | **offline** | `npx dji-cloud-simulator --scenario offline` | Device comes online briefly, sends one OSD frame, then goes offline. Tests device lifecycle handling. |
 
 ## Options
@@ -32,9 +32,55 @@ That's it. The simulator connects to `mqtt://localhost:1883` and starts publishi
 --gateway <sn>      Gateway (dock) serial number (default: DOCK-SN-001)
 --device <sn>       Aircraft serial number (default: AIRCRAFT-SN-001)
 --scenario <name>   Scenario to run (default: patrol)
+--config <path>     Load scenario config from JSON file
 ```
 
 The broker URL can also be set via the `MQTT_BROKER` environment variable.
+
+## Custom Configuration
+
+Use `--config` to override default flight parameters. All fields are optional -- only include what you want to change:
+
+```bash
+npx dji-cloud-simulator --config my-site.json --scenario patrol
+```
+
+```json
+{
+  "waypoints": [
+    { "lat": 37.7749, "lng": -122.4194 },
+    { "lat": 37.7755, "lng": -122.4180 },
+    { "lat": 37.7749, "lng": -122.4194 }
+  ],
+  "osd_interval_ms": 2000,
+  "dock_osd_every_n": 5,
+  "hms_alarm_every_n": 20,
+  "battery_start": 95,
+  "battery_decay_per_tick": 0.3,
+  "battery_min": 20,
+  "altitude_base": 80,
+  "altitude_variation": 10,
+  "hms_codes": [
+    { "code": "0x16100001", "level": 1, "module": 1 },
+    { "code": "0x16100086", "level": 2, "module": 1, "imminent": true }
+  ]
+}
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `waypoints` | Boston Seaport (8 pts) | Array of `{lat, lng}` for the flight path. Last point should match first for a loop. |
+| `osd_interval_ms` | 2000 | Milliseconds between OSD telemetry publishes |
+| `dock_osd_every_n` | 5 | Publish dock OSD every N OSD cycles |
+| `hms_alarm_every_n` | 20 | Publish HMS alarm every N OSD cycles |
+| `battery_start` | 95 | Starting battery percentage |
+| `battery_decay_per_tick` | 0.3 | Battery % lost per OSD cycle |
+| `battery_min` | 20 | Minimum battery (stops decaying) |
+| `altitude_base` | 50 | Base flight altitude in meters |
+| `altitude_variation` | 5 | Altitude oscillation amplitude in meters |
+| `hms_codes` | compass + battery | Custom HMS alarm codes (overrides default behavior) |
+
+See `example-config.json` for a complete template.
 
 ## MQTT Topics
 
@@ -49,7 +95,7 @@ The simulator publishes to the same topics as a real DJI Dock:
 | `thing/product/{gatewaySn}/events` | 1 | HMS alarms, mission progress |
 | `thing/product/{gatewaySn}/services_reply` | 1 | Auto-ack for inbound commands |
 
-The simulator also subscribes to `thing/product/{gatewaySn}/services` and auto-acknowledges any commands sent to the dock.
+The simulator subscribes to `thing/product/{gatewaySn}/services` and responds to inbound commands. Known DJI methods (flighttask_*, device_reboot, cover_open/close, return_home, etc.) receive `result: 0` (success). Unknown methods receive `result: 314000` (unsupported). Commands missing `bid` or `method` fields are rejected.
 
 ## Message Format
 
@@ -84,6 +130,12 @@ Device model codes: domain 0 = aircraft, type 60 = M30 series, sub_type 1 = M30T
 
 30+ fields including: position, altitude, attitude, speed, wind, battery (dual cells with voltage/temperature/current), GPS/RTK state, home distance, storage, obstacle avoidance, flight time, maintenance status.
 
+**Realistic telemetry behavior:**
+- **Flight mode codes** transition through phases: 0 (standby) → 4 (auto takeoff) → 5 (wayline flight) → 9 (RTH) → 10 (landing)
+- **Battery cells** diverge over time: cell 1 draws higher current, runs warmer, voltage differential grows from ~0mV to ~300mV over 8 minutes
+- **RTK quality** correlates with satellite count: ≥8 SVs → quality 5 (RTK fixed), ≥6 → quality 4, ≥4 → quality 2 (float), <4 → quality 1 (single)
+- **Storage** fills incrementally and caps at total capacity (64GB)
+
 ### HMS (Health Management System)
 
 ```json
@@ -102,6 +154,8 @@ Device model codes: domain 0 = aircraft, type 60 = M30 series, sub_type 1 = M30T
 ```
 
 HMS levels: 0 = Notification, 1 = Reminder, 2 = Warning. Args use numeric indices per DJI spec.
+
+**Battery imbalance correlation:** The battery cell imbalance alarm (`0x16100086`, level 2) only fires when the OSD telemetry shows a cell voltage differential exceeding 200mV. This matches real DJI behavior where HMS alarms are triggered by actual sensor thresholds, not arbitrary timers. In patrol mode, the differential grows naturally over flight time, so early HMS events contain only compass interference while later events include both alarms.
 
 ### Mission Progress (flighttask_progress)
 
@@ -137,7 +191,11 @@ mosquitto_pub -t 'thing/product/DOCK-SN-001/services' \
   -m '{"bid":"test-001","tid":"tid-001","method":"flighttask_create","data":{}}'
 ```
 
-The simulator will auto-acknowledge with `result: 0` on the `services_reply` topic.
+Known methods get `result: 0`. Unknown methods get `result: 314000` (unsupported).
+
+## Connection Resilience
+
+The simulator automatically reconnects if the MQTT broker restarts or drops the connection. During a reconnect, the scenario continues from where it left off. This makes it safe to use in CI/CD pipelines and long-running test sessions.
 
 ## License
 
