@@ -45,9 +45,10 @@ Plans:
   3. Tests verify mission scenario lifecycle: status updates, progress events, and completion
   4. Tests verify OSD messages contain all 30+ required fields with correct types
   5. Tests verify command handling returns result:0 for known methods and result:314000 for unknown
-**Plans**: 1 plan
+**Plans**: 2 plans
 Plans:
-- [ ] 01-01-PLAN.md — Add files whitelist and registry metadata to package.json
+- [ ] 02-01-PLAN.md — Test infrastructure + offline scenario + OSD field validation
+- [ ] 02-02-PLAN.md — Mission lifecycle, HMS threshold, command handling, config overrides
 
 ### Phase 3: Linting
 **Goal**: Code quality is enforced by ESLint with zero errors on the existing codebase
@@ -133,7 +134,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Package Foundation | 0/TBD | Not started | - |
-| 2. Test Suite | 0/TBD | Not started | - |
+| 2. Test Suite | 0/2 | Not started | - |
 | 3. Linting | 0/TBD | Not started | - |
 | 4. CI Pipeline | 0/TBD | Not started | - |
 | 5. Community Files | 0/TBD | Not started | - |
