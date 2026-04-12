@@ -4,6 +4,12 @@
   "description": "Spec-accurate DJI Cloud API MQTT simulator for development and integration testing",
   "type": "module",
   "main": "simulator.mjs",
+  "files": [
+    "simulator.mjs",
+    "example-config.json",
+    "README.md",
+    "LICENSE"
+  ],
   "bin": {
     "dji-cloud-simulator": "./simulator.mjs"
   },
@@ -29,6 +35,11 @@
     "url": "https://github.com/YuYongJu/dji-cloud-simulator.git"
   },
   "license": "MIT",
+  "author": "Panoptris (https://panoptris.com)",
+  "homepage": "https://github.com/YuYongJu/dji-cloud-simulator#readme",
+  "bugs": {
+    "url": "https://github.com/YuYongJu/dji-cloud-simulator/issues"
+  },
   "engines": {
     "node": ">=18"
   },
