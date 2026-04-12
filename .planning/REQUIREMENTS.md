@@ -92,13 +92,43 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated by roadmapper) | | |
+| PKG-01 | Phase 1: Package Foundation | Pending |
+| PKG-02 | Phase 1: Package Foundation | Pending |
+| PKG-03 | Phase 6: Pre-Publish Gate | Pending |
+| PKG-04 | Phase 6: Pre-Publish Gate | Pending |
+| TEST-01 | Phase 2: Test Suite | Pending |
+| TEST-02 | Phase 2: Test Suite | Pending |
+| TEST-03 | Phase 2: Test Suite | Pending |
+| TEST-04 | Phase 2: Test Suite | Pending |
+| TEST-05 | Phase 2: Test Suite | Pending |
+| TEST-06 | Phase 2: Test Suite | Pending |
+| TEST-07 | Phase 2: Test Suite | Pending |
+| TEST-08 | Phase 2: Test Suite | Pending |
+| CI-01 | Phase 4: CI Pipeline | Pending |
+| CI-02 | Phase 4: CI Pipeline | Pending |
+| CI-03 | Phase 4: CI Pipeline | Pending |
+| CI-04 | Phase 8: Post-Publish Polish | Pending |
+| CI-05 | Phase 8: Post-Publish Polish | Pending |
+| COMM-01 | Phase 5: Community Files | Pending |
+| COMM-02 | Phase 5: Community Files | Pending |
+| COMM-03 | Phase 5: Community Files | Pending |
+| COMM-04 | Phase 5: Community Files | Pending |
+| PUB-01 | Phase 7: npm Publish | Pending |
+| PUB-02 | Phase 7: npm Publish | Pending |
+| PUB-03 | Phase 7: npm Publish | Pending |
+| READ-01 | Phase 8: Post-Publish Polish | Pending |
+| READ-02 | Phase 8: Post-Publish Polish | Pending |
+| READ-03 | Phase 8: Post-Publish Polish | Pending |
+| READ-04 | Phase 8: Post-Publish Polish | Pending |
+| READ-05 | Phase 8: Post-Publish Polish | Pending |
+| LINT-01 | Phase 3: Linting | Pending |
+| LINT-02 | Phase 3: Linting | Pending |
 
 **Coverage:**
-- v1 requirements: 27 total
-- Mapped to phases: 0
-- Unmapped: 27
+- v1 requirements: 31 total
+- Mapped to phases: 31
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-12*
-*Last updated: 2026-04-12 after initial definition*
+*Last updated: 2026-04-12 after roadmap creation*
