@@ -1,5 +1,9 @@
 # DJI Cloud API Simulator
 
+[![npm version](https://img.shields.io/npm/v/dji-cloud-simulator.svg)](https://www.npmjs.com/package/dji-cloud-simulator)
+[![CI](https://github.com/YuYongJu/dji-cloud-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/YuYongJu/dji-cloud-simulator/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Spec-accurate MQTT simulator for the DJI Cloud API. Publishes realistic telemetry, HMS alarms, and mission progress events as if a Matrice 30T drone were connected via DJI Dock 2.
 
 Built for integration testing, adapter development, and exploring the DJI Cloud API message format without real hardware.
@@ -193,9 +197,38 @@ mosquitto_pub -t 'thing/product/DOCK-SN-001/services' \
 
 Known methods get `result: 0`. Unknown methods get `result: 314000` (unsupported).
 
+## Example Output
+
+```
+DJI Cloud API Simulator
+  Broker     : mqtt://localhost:1883
+  Gateway SN : DOCK-SN-001
+  Device SN  : AIRCRAFT-SN-001
+  Scenario   : patrol
+
+Connected to broker
+
+[status] Device ONLINE (update_topo)
+[state]  Firmware 07.01.10.01
+[osd]    lat=42.35210 lng=-71.04460 alt=50.0m bat=95% home=0m mode=0 rtk=5
+[dock]   temp=23.1C humid=49% cover=closed
+[osd]    lat=42.35210 lng=-71.04460 alt=50.5m bat=95% home=0m mode=4 rtk=5
+[osd]    lat=42.35210 lng=-71.04460 alt=51.0m bat=94% home=0m mode=4 rtk=4
+[osd]    lat=42.35290 lng=-71.04428 alt=52.5m bat=94% home=97m mode=5 rtk=5
+[osd]    lat=42.35380 lng=-71.04396 alt=54.9m bat=93% home=215m mode=5 rtk=5
+[dock]   temp=22.8C humid=51% cover=open
+[osd]    lat=42.35470 lng=-71.04364 alt=53.1m bat=93% home=334m mode=5 rtk=4
+...
+[event]  HMS alarm: compass interference (Reminder) [battery delta 58mV, below 200mV threshold]
+```
+
 ## Connection Resilience
 
 The simulator automatically reconnects if the MQTT broker restarts or drops the connection. During a reconnect, the scenario continues from where it left off. This makes it safe to use in CI/CD pipelines and long-running test sessions.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, running tests, and PR guidelines.
 
 ## License
 
