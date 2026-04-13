@@ -19,7 +19,8 @@
     "mission": "node simulator.mjs --scenario mission",
     "hms": "node simulator.mjs --scenario hms-alarm",
     "offline": "node simulator.mjs --scenario offline",
-    "test": "node --test 'test/**/*.test.mjs'"
+    "test": "node --test 'test/**/*.test.mjs'",
+    "lint": "eslint simulator.mjs"
   },
   "keywords": [
     "dji",
@@ -48,6 +49,9 @@
     "mqtt": "^5.15.0"
   },
   "devDependencies": {
-    "aedes": "^1.0.2"
+    "@eslint/js": "^10.0.1",
+    "aedes": "^1.0.2",
+    "eslint": "^10.2.0",
+    "globals": "^17.5.0"
   }
 }
