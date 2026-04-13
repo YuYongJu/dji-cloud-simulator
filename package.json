@@ -20,7 +20,8 @@
     "hms": "node simulator.mjs --scenario hms-alarm",
     "offline": "node simulator.mjs --scenario offline",
     "test": "node --test 'test/**/*.test.mjs'",
-    "lint": "eslint simulator.mjs"
+    "lint": "eslint simulator.mjs",
+    "prepublishOnly": "npm test"
   },
   "keywords": [
     "dji",
