@@ -1,6 +1,5 @@
 # DJI Cloud API Simulator
 
-[![npm version](https://img.shields.io/npm/v/dji-cloud-simulator.svg)](https://www.npmjs.com/package/dji-cloud-simulator)
 [![CI](https://github.com/YuYongJu/dji-cloud-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/YuYongJu/dji-cloud-simulator/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -15,7 +14,7 @@ Built for integration testing, adapter development, and exploring the DJI Cloud 
 docker run -d -p 1883:1883 eclipse-mosquitto:2
 
 # 2. Run the simulator
-npx dji-cloud-simulator
+npx github:YuYongJu/dji-cloud-simulator
 ```
 
 That's it. The simulator connects to `mqtt://localhost:1883` and starts publishing DJI-format MQTT messages.
@@ -24,10 +23,10 @@ That's it. The simulator connects to `mqtt://localhost:1883` and starts publishi
 
 | Scenario | Command | What it does |
 |----------|---------|-------------|
-| **patrol** (default) | `npx dji-cloud-simulator` | Continuous patrol loop. OSD every 2s, dock telemetry every 10s, HMS alarms every 40s. Runs until Ctrl+C. |
-| **mission** | `npx dji-cloud-simulator --scenario mission` | Full mission lifecycle: takeoff, 4 waypoints, landing. Publishes `flighttask_progress` events with nested status/progress/ext. |
-| **hms-alarm** | `npx dji-cloud-simulator --scenario hms-alarm` | Device comes online, fires 5 HMS alarm bursts with escalating cell imbalance. Early bursts show compass interference only; later bursts add battery imbalance when voltage differential exceeds 200mV threshold. |
-| **offline** | `npx dji-cloud-simulator --scenario offline` | Device comes online briefly, sends one OSD frame, then goes offline. Tests device lifecycle handling. |
+| **patrol** (default) | `npx github:YuYongJu/dji-cloud-simulator` | Continuous patrol loop. OSD every 2s, dock telemetry every 10s, HMS alarms every 40s. Runs until Ctrl+C. |
+| **mission** | `npx github:YuYongJu/dji-cloud-simulator --scenario mission` | Full mission lifecycle: takeoff, 4 waypoints, landing. Publishes `flighttask_progress` events with nested status/progress/ext. |
+| **hms-alarm** | `npx github:YuYongJu/dji-cloud-simulator --scenario hms-alarm` | Device comes online, fires 5 HMS alarm bursts with escalating cell imbalance. Early bursts show compass interference only; later bursts add battery imbalance when voltage differential exceeds 200mV threshold. |
+| **offline** | `npx github:YuYongJu/dji-cloud-simulator --scenario offline` | Device comes online briefly, sends one OSD frame, then goes offline. Tests device lifecycle handling. |
 
 ## Options
 
@@ -46,7 +45,7 @@ The broker URL can also be set via the `MQTT_BROKER` environment variable.
 Use `--config` to override default flight parameters. All fields are optional -- only include what you want to change:
 
 ```bash
-npx dji-cloud-simulator --config my-site.json --scenario patrol
+npx github:YuYongJu/dji-cloud-simulator --config my-site.json --scenario patrol
 ```
 
 ```json
