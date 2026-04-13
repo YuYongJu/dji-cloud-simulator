@@ -18,8 +18,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: CI Pipeline** - GitHub Actions running tests and lint on push/PR across Node matrix
 - [x] **Phase 5: Community Files** - CONTRIBUTING, CHANGELOG, issue templates, PR template
 - [x] **Phase 6: Pre-Publish Gate** - Safety scripts and tarball verification before first publish
-- [ ] **Phase 7: npm Publish** - Package live on npm, npx works from a clean machine
-- [ ] **Phase 8: Post-Publish Polish** - Automated publish workflow, badges, terminal GIF
+- [ ] **Phase 7: npm Publish** ⏸ (awaiting npm login) - Package live on npm, npx works from a clean machine
+- [x] **Phase 8: Post-Publish Polish** - Automated publish workflow, badges, terminal GIF
 
 ## Phase Details
 
