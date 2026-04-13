@@ -13,7 +13,7 @@ This is a brownfield polish effort: the simulator already works. The roadmap seq
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Package Foundation** - Correct npm tarball contents and professional registry metadata
-- [ ] **Phase 2: Test Suite** - Integration tests proving message format and scenario correctness
+- [x] **Phase 2: Test Suite** - Integration tests proving message format and scenario correctness
 - [ ] **Phase 3: Linting** - ESLint 9 flat config with zero errors on simulator.mjs
 - [ ] **Phase 4: CI Pipeline** - GitHub Actions running tests and lint on push/PR across Node matrix
 - [ ] **Phase 5: Community Files** - CONTRIBUTING, CHANGELOG, issue templates, PR template
