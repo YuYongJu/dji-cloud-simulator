@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Linting** - ESLint 9 flat config with zero errors on simulator.mjs
 - [x] **Phase 4: CI Pipeline** - GitHub Actions running tests and lint on push/PR across Node matrix
 - [x] **Phase 5: Community Files** - CONTRIBUTING, CHANGELOG, issue templates, PR template
-- [ ] **Phase 6: Pre-Publish Gate** - Safety scripts and tarball verification before first publish
+- [x] **Phase 6: Pre-Publish Gate** - Safety scripts and tarball verification before first publish
 - [ ] **Phase 7: npm Publish** - Package live on npm, npx works from a clean machine
 - [ ] **Phase 8: Post-Publish Polish** - Automated publish workflow, badges, terminal GIF
 
