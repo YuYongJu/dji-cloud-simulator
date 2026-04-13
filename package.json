@@ -11,7 +11,7 @@
     "LICENSE"
   ],
   "bin": {
-    "dji-cloud-simulator": "./simulator.mjs"
+    "dji-cloud-simulator": "simulator.mjs"
   },
   "scripts": {
     "start": "node simulator.mjs",
@@ -35,7 +35,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/YuYongJu/dji-cloud-simulator.git"
+    "url": "git+https://github.com/YuYongJu/dji-cloud-simulator.git"
   },
   "license": "MIT",
   "author": "Panoptris (https://panoptris.com)",
