@@ -19,7 +19,7 @@
     "mission": "node simulator.mjs --scenario mission",
     "hms": "node simulator.mjs --scenario hms-alarm",
     "offline": "node simulator.mjs --scenario offline",
-    "test": "node --test 'test/**/*.test.mjs'",
+    "test": "node --test test/offline.test.mjs test/mission.test.mjs test/commands.test.mjs",
     "lint": "eslint simulator.mjs",
     "prepublishOnly": "npm test"
   },
