@@ -46,19 +46,22 @@ export async function startBroker() {
  * Spawn the simulator as a child process.
  * Returns the ChildProcess instance.
  */
-export function spawnSimulator({ brokerUrl, scenario, gateway = 'TEST-GW-001', device = 'TEST-DEV-001', extraArgs = [] } = {}) {
+export function spawnSimulator({ brokerUrl, scenario, gateway = 'TEST-GW-001', device = 'TEST-DEV-001', extraArgs = [], env = {} } = {}) {
   const args = [
     'simulator.mjs',
-    '--broker', brokerUrl,
-    '--scenario', scenario,
-    '--gateway', gateway,
-    '--device', device,
+    ...[
+      ['--broker', brokerUrl],
+      ['--scenario', scenario],
+      ['--gateway', gateway],
+      ['--device', device],
+    ].filter(([, value]) => value != null).flat(),
     ...extraArgs,
   ];
   return spawn(process.execPath, args, {
     // fileURLToPath resolves correctly on Windows; URL.pathname returns
     // a leading-slash path like /C:/... which is not a valid Windows cwd.
     cwd: REPO_ROOT,
+    env: { ...process.env, ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }

@@ -1,0 +1,24 @@
+services:
+  simulator:
+    build: .
+    image: dji-cloud-simulator:local
+    environment:
+      MQTT_BROKER: ${MQTT_BROKER:-mqtt://host.docker.internal:1883}
+      MQTT_USER: ${MQTT_USER:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      GATEWAY_SN: ${GATEWAY_SN:-DOCK-SN-001}
+      DEVICE_SN: ${DEVICE_SN:-AIRCRAFT-SN-001}
+      SCENARIO: ${SCENARIO:-patrol}
+      SIM_CONFIG: ${SIM_CONFIG:-}
+    volumes:
+      - ./example-config.json:/app/config.json:ro
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_signal: SIGINT
+    stop_grace_period: 5s
+    restart: "no"
