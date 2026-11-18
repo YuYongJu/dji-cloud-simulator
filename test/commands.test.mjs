@@ -4,7 +4,80 @@ import { writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import mqtt from 'mqtt';
+import { once } from 'node:events';
 import { startBroker, spawnSimulator, collectMessages } from './helpers.mjs';
+
+describe('MQTT authentication', () => {
+  for (const [userFlag, passwordFlag] of [['--user', '--password'], ['-u', '-p']]) {
+    it(`publishes telemetry and handles commands using ${userFlag} and ${passwordFlag}`, { timeout: 15000 }, async () => {
+      const brokerCtx = await startBroker();
+      const username = 'test-user';
+      const password = 'test:p@ss/word with spaces';
+      let simulatorAuthenticated = false;
+      brokerCtx.broker.authenticate = (client, user, pass, callback) => {
+        const valid = user === username && pass?.toString() === password;
+        if (client.id.startsWith('dji-sim-') && valid) simulatorAuthenticated = true;
+        callback(null, valid);
+      };
+
+      const testClient = mqtt.connect(brokerCtx.url, {
+        username,
+        password,
+        reconnectPeriod: 0,
+      });
+      let child;
+      let childExited;
+      let timer;
+      let output = '';
+      try {
+        await once(testClient, 'connect');
+        await new Promise((resolve, reject) => {
+          testClient.subscribe([
+            'thing/product/TEST-DEV-001/osd',
+            'thing/product/TEST-GW-001/services_reply',
+          ], { qos: 1 }, (err) => err ? reject(err) : resolve());
+        });
+
+        const exchange = new Promise((resolve, reject) => {
+          timer = setTimeout(() => reject(new Error('Authenticated MQTT exchange timed out')), 10000);
+          testClient.on('message', (topic, payload) => {
+            if (topic.endsWith('/osd')) {
+              testClient.publish('thing/product/TEST-GW-001/services', JSON.stringify({
+                bid: 'auth-test',
+                method: 'flighttask_prepare',
+              }), { qos: 1 });
+            } else {
+              resolve(JSON.parse(payload.toString()));
+            }
+          });
+        });
+
+        child = spawnSimulator({
+          brokerUrl: brokerCtx.url,
+          scenario: 'offline',
+          extraArgs: [userFlag, username, passwordFlag, password],
+        });
+        childExited = once(child, 'exit');
+        child.stdout.on('data', (data) => { output += data; });
+        child.stderr.on('data', (data) => { output += data; });
+
+        const reply = await exchange;
+        assert.ok(simulatorAuthenticated, 'Broker must authenticate the simulator');
+        assert.equal(reply.bid, 'auth-test');
+        assert.equal(reply.data.result, 0);
+        assert.ok(!output.includes(password), 'Password must not appear in simulator logs');
+      } finally {
+        clearTimeout(timer);
+        if (child) {
+          if (child.exitCode === null && child.signalCode === null) child.kill();
+          await childExited;
+        }
+        await new Promise((resolve) => testClient.end(true, resolve));
+        await brokerCtx.close();
+      }
+    });
+  }
+});
 
 describe('command handling', () => {
   let brokerCtx;
