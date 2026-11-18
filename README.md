@@ -32,6 +32,8 @@ That's it. The simulator connects to `mqtt://localhost:1883` and starts publishi
 
 ```
 --broker <url>      MQTT broker URL (default: mqtt://localhost:1883)
+-u, --user <name>   MQTT username (optional)
+-p, --password <pw> MQTT password (optional)
 --gateway <sn>      Gateway (dock) serial number (default: DOCK-SN-001)
 --device <sn>       Aircraft serial number (default: AIRCRAFT-SN-001)
 --scenario <name>   Scenario to run (default: patrol)
@@ -39,6 +41,19 @@ That's it. The simulator connects to `mqtt://localhost:1883` and starts publishi
 ```
 
 The broker URL can also be set via the `MQTT_BROKER` environment variable.
+
+For brokers that require authentication, pass the credentials separately from the broker URL:
+
+```bash
+node simulator.mjs --broker mqtts://broker.example.com:8883 --user my-user --password 'my-password'
+# Short options are also supported:
+node simulator.mjs --broker mqtts://broker.example.com:8883 -u my-user -p 'my-password'
+```
+
+These options are passed to the MQTT client as `username` and `password`, including
+on reconnect. Omit them for brokers that allow anonymous access. Use `mqtts://`
+to encrypt credentials in transit. Command-line credentials may be visible in
+shell history and process listings.
 
 ## Custom Configuration
 
