@@ -8,8 +8,9 @@ import { once } from 'node:events';
 import { startBroker, spawnSimulator, collectMessages } from './helpers.mjs';
 
 describe('MQTT authentication', () => {
-  for (const [userFlag, passwordFlag] of [['--user', '--password'], ['-u', '-p']]) {
-    it(`publishes telemetry and handles commands using ${userFlag} and ${passwordFlag}`, { timeout: 15000 }, async () => {
+  for (const [userFlag, passwordFlag] of [['--user', '--password'], ['-u', '-p'], [null, null]]) {
+    const source = userFlag ? `${userFlag} and ${passwordFlag}` : 'environment variables';
+    it(`publishes telemetry and handles commands using ${source}`, { timeout: 15000 }, async () => {
       const brokerCtx = await startBroker();
       const username = 'test-user';
       const password = 'test:p@ss/word with spaces';
@@ -55,7 +56,11 @@ describe('MQTT authentication', () => {
         child = spawnSimulator({
           brokerUrl: brokerCtx.url,
           scenario: 'offline',
-          extraArgs: [userFlag, username, passwordFlag, password],
+          extraArgs: userFlag ? [userFlag, username, passwordFlag, password] : [],
+          env: {
+            MQTT_USER: userFlag ? 'wrong-user' : username,
+            MQTT_PASSWORD: userFlag ? 'wrong-password' : password,
+          },
         });
         childExited = once(child, 'exit');
         child.stdout.on('data', (data) => { output += data; });
@@ -182,64 +187,79 @@ describe('command handling', () => {
 });
 
 describe('config file overrides', () => {
-  let brokerCtx;
-  let messages;
-  let tmpConfigPath;
+  for (const useEnv of [false, true]) {
+    describe(`using ${useEnv ? 'environment variables' : 'CLI flags'}`, () => {
+      let brokerCtx;
+      let messages;
+      let tmpConfigPath;
 
-  before(async () => {
-    brokerCtx = await startBroker();
+      before(async () => {
+        brokerCtx = await startBroker();
 
-    // Create temp config with custom battery_start and waypoints
-    tmpConfigPath = join(tmpdir(), `dji-test-config-${Date.now()}.json`);
-    writeFileSync(tmpConfigPath, JSON.stringify({
-      battery_start: 80,
-      waypoints: [
-        { lat: 10.0, lng: 20.0 },
-        { lat: 10.001, lng: 20.001 },
-      ],
-    }));
+        // Create temp config with custom battery_start and waypoints
+        tmpConfigPath = join(tmpdir(), `dji-test-config-${Date.now()}.json`);
+        writeFileSync(tmpConfigPath, JSON.stringify({
+          battery_start: 80,
+          waypoints: [
+            { lat: 10.0, lng: 20.0 },
+            { lat: 10.001, lng: 20.001 },
+          ],
+        }));
 
-    const collecting = collectMessages({
-      brokerUrl: brokerCtx.url,
-      topics: ['thing/product/TEST-DEV-001/osd'],
-      until: (msgs) => msgs.length >= 1,
-      timeoutMs: 10000,
+        const collecting = collectMessages({
+          brokerUrl: brokerCtx.url,
+          topics: ['thing/product/TEST-DEV-001/osd'],
+          until: (msgs) => msgs.length >= 1,
+          timeoutMs: 10000,
+        });
+
+        const child = spawnSimulator({
+          brokerUrl: useEnv ? null : brokerCtx.url,
+          scenario: useEnv ? null : 'offline',
+          gateway: useEnv ? null : 'TEST-GW-001',
+          device: useEnv ? null : 'TEST-DEV-001',
+          extraArgs: useEnv ? [] : ['--config', tmpConfigPath],
+          env: {
+            MQTT_BROKER: useEnv ? brokerCtx.url : 'mqtt://127.0.0.1:1',
+            MQTT_USER: '',
+            MQTT_PASSWORD: '',
+            GATEWAY_SN: useEnv ? 'TEST-GW-001' : 'WRONG-GW',
+            DEVICE_SN: useEnv ? 'TEST-DEV-001' : 'WRONG-DEV',
+            SCENARIO: useEnv ? 'offline' : 'invalid-scenario',
+            SIM_CONFIG: useEnv ? tmpConfigPath : '/missing-config.json',
+          },
+        });
+
+        child.stderr.on('data', (d) => process.stderr.write(d));
+
+        messages = await collecting;
+
+        await new Promise((resolve) => {
+          child.on('exit', resolve);
+          setTimeout(() => { child.kill(); resolve(); }, 5000);
+        });
+      });
+
+      after(async () => {
+        try { unlinkSync(tmpConfigPath); } catch { /* already cleaned */ }
+        if (brokerCtx) await brokerCtx.close();
+      });
+
+      it('battery_start from config overrides default', () => {
+        assert.ok(messages.length >= 1, 'Should receive at least 1 OSD message');
+        const osd = messages[0].payload;
+        // At tick=0, battery should be exactly battery_start (no decay yet)
+        assert.equal(osd.battery.capacity_percent, 80, 'Battery should be 80 from config, not default 95');
+      });
+
+      it('waypoints from config override default position', () => {
+        const osd = messages[0].payload;
+        // latitude should be close to 10.0 (from config waypoints[0]), not the default position
+        assert.ok(
+          Math.abs(osd.latitude - 10.0) < 0.01,
+          `Latitude should be near 10.0 from config, got ${osd.latitude}`
+        );
+      });
     });
-
-    const child = spawnSimulator({
-      brokerUrl: brokerCtx.url,
-      scenario: 'offline',
-      extraArgs: ['--config', tmpConfigPath],
-    });
-
-    child.stderr.on('data', (d) => process.stderr.write(d));
-
-    messages = await collecting;
-
-    await new Promise((resolve) => {
-      child.on('exit', resolve);
-      setTimeout(() => { child.kill(); resolve(); }, 5000);
-    });
-  });
-
-  after(async () => {
-    try { unlinkSync(tmpConfigPath); } catch { /* already cleaned */ }
-    if (brokerCtx) await brokerCtx.close();
-  });
-
-  it('battery_start from config overrides default', () => {
-    assert.ok(messages.length >= 1, 'Should receive at least 1 OSD message');
-    const osd = messages[0].payload;
-    // At tick=0, battery should be exactly battery_start (no decay yet)
-    assert.equal(osd.battery.capacity_percent, 80, 'Battery should be 80 from config, not default 95');
-  });
-
-  it('waypoints from config override default position', () => {
-    const osd = messages[0].payload;
-    // latitude should be close to 10.0 (from config waypoints[0]), not default 42.3521
-    assert.ok(
-      Math.abs(osd.latitude - 10.0) < 0.01,
-      `Latitude should be near 10.0 from config, got ${osd.latitude}`
-    );
-  });
+  }
 });

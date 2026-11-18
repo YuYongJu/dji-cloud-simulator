@@ -38,11 +38,17 @@ Options:
   --broker <url>      MQTT broker URL (default: mqtt://localhost:1883)
                       Also settable via MQTT_BROKER env var
   -u, --user <name>   MQTT username (optional)
+                      Also settable via MQTT_USER env var
   -p, --password <pw> MQTT password (optional)
+                      Also settable via MQTT_PASSWORD env var
   --gateway <sn>      Gateway (dock) serial number (default: DOCK-SN-001)
+                      Also settable via GATEWAY_SN env var
   --device <sn>       Aircraft serial number (default: AIRCRAFT-SN-001)
+                      Also settable via DEVICE_SN env var
   --scenario <name>   Scenario to run (default: patrol)
+                      Also settable via SCENARIO env var
   --config <path>     Load scenario config from JSON file (see below)
+                      Also settable via SIM_CONFIG env var
   -h, --help          Show this help message
 
 Scenarios:
@@ -103,7 +109,7 @@ const getArg = (flag) => {
 // ── Config file loading ─────────────────────────────────────────────
 
 let userConfig = {};
-const configPath = getArg('--config');
+const configPath = getArg('--config') ?? (process.env.SIM_CONFIG || null);
 if (configPath) {
   try {
     userConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
@@ -115,11 +121,11 @@ if (configPath) {
 }
 
 const BROKER_URL = getArg('--broker') ?? process.env.MQTT_BROKER ?? 'mqtt://localhost:1883';
-const MQTT_USER = getArg('--user') ?? getArg('-u') ?? undefined;
-const MQTT_PASSWORD = getArg('--password') ?? getArg('-p') ?? undefined;
-const GATEWAY_SN = getArg('--gateway') ?? 'DOCK-SN-001';
-const DEVICE_SN  = getArg('--device')  ?? 'AIRCRAFT-SN-001';
-const SCENARIO   = getArg('--scenario') ?? 'patrol';
+const MQTT_USER = getArg('--user') ?? getArg('-u') ?? (process.env.MQTT_USER || undefined);
+const MQTT_PASSWORD = getArg('--password') ?? getArg('-p') ?? (process.env.MQTT_PASSWORD || undefined);
+const GATEWAY_SN = getArg('--gateway') ?? (process.env.GATEWAY_SN || 'DOCK-SN-001');
+const DEVICE_SN  = getArg('--device')  ?? (process.env.DEVICE_SN || 'AIRCRAFT-SN-001');
+const SCENARIO   = getArg('--scenario') ?? (process.env.SCENARIO || 'patrol');
 
 // ── Configurable defaults ───────────────────────────────────────────
 

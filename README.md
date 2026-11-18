@@ -40,7 +40,10 @@ That's it. The simulator connects to `mqtt://localhost:1883` and starts publishi
 --config <path>     Load scenario config from JSON file
 ```
 
-The broker URL can also be set via the `MQTT_BROKER` environment variable.
+CLI flags take precedence over environment variables. The equivalents are
+`MQTT_BROKER`, `MQTT_USER`, `MQTT_PASSWORD`, `GATEWAY_SN`, `DEVICE_SN`,
+`SCENARIO`, and `SIM_CONFIG` respectively. Empty environment values for optional
+credentials or the config path are treated as unset.
 
 For brokers that require authentication, pass the credentials separately from the broker URL:
 
@@ -54,6 +57,70 @@ These options are passed to the MQTT client as `username` and `password`, includ
 on reconnect. Omit them for brokers that allow anonymous access. Use `mqtts://`
 to encrypt credentials in transit. Command-line credentials may be visible in
 shell history and process listings.
+
+## Docker
+
+Build and run against a broker accessible from the container:
+
+```bash
+docker build -t dji-cloud-simulator:local .
+docker run --rm \
+  --add-host host.docker.internal:host-gateway \
+  -e MQTT_BROKER=mqtt://host.docker.internal:1883 \
+  dji-cloud-simulator:local
+```
+
+The image runs as the non-root `node` user and installs production dependencies
+from the lockfile. CLI options can be appended after the image name:
+
+```bash
+docker run --rm \
+  -e MQTT_BROKER=mqtts://broker.example.com:8883 \
+  -e MQTT_USER -e MQTT_PASSWORD \
+  dji-cloud-simulator:local --scenario mission
+```
+
+In the authenticated example, export `MQTT_USER` and `MQTT_PASSWORD` in your
+shell first. Environment variables avoid putting credentials in the container's
+command arguments, but users with Docker access can still inspect them.
+
+### Docker Compose
+
+```bash
+cp .env.example .env
+# Edit .env with your broker URL, credentials, device IDs, and scenario.
+docker compose up --build -d
+docker compose logs -f simulator
+docker compose down
+```
+
+The example environment file covers every supported variable:
+
+- `MQTT_BROKER`: broker URL; Compose defaults to `mqtt://host.docker.internal:1883`.
+- `MQTT_USER` / `MQTT_PASSWORD`: optional credentials; blank means anonymous.
+- `GATEWAY_SN` / `DEVICE_SN`: serial numbers used in MQTT topics.
+- `SCENARIO`: `patrol`, `mission`, `hms-alarm`, or `offline`.
+- `SIM_CONFIG`: optional JSON path inside the container. Set `/app/config.json`
+  to load the mounted `example-config.json`; edit the mount to use another file.
+
+Containers cannot reach the host broker using `localhost`. The supplied
+`host.docker.internal` mapping works with Docker Desktop and supports Docker
+Engine on Linux; the broker must listen on an address reachable from containers.
+For a remote broker, use its hostname. No inbound container ports are needed.
+
+Compose uses a read-only root filesystem, a read-only config mount, and no
+automatic restart so finite scenarios run only once. Docker sends `SIGINT` to
+allow the simulator to publish offline status before exiting. Local `.env` files
+are excluded from Git and the Docker build context; do not commit credentials.
+For literal passwords containing `$` in a Compose `.env` file, use single quotes
+to prevent variable interpolation.
+
+To run a finite scenario in the foreground:
+
+```bash
+SCENARIO=offline docker compose up --build --abort-on-container-exit \
+  --exit-code-from simulator
+```
 
 ## Custom Configuration
 

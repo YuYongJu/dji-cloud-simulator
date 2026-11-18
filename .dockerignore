@@ -1,0 +1,6 @@
+*
+!Dockerfile
+!package.json
+!package-lock.json
+!simulator.mjs
+!example-config.json
